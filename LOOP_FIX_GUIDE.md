@@ -55,6 +55,8 @@ authorizations[].is_bot === "false"
 
 **Your bot is likely posting with a DIFFERENT user ID that's not being filtered!**
 
+**IMPORTANT:** Previous versions of this guide referenced `event.subtype`, but this field does NOT exist in Make.com mappings! Use `event.bot_id` instead.
+
 ### How to Find Your Bot's User ID:
 
 1. **In Make.com**, add a new module right after Module 15 (webhook):
@@ -77,8 +79,6 @@ authorizations[].is_bot === "false"
 // CORRECT filter logic:
 event.bot_id does NOT exist
 AND
-event.subtype does NOT exist
-AND
 event.user !== "B09PJ8DT2HE"
 AND
 event.user !== "U09JV1FUPMJ"
@@ -86,7 +86,9 @@ AND
 event.user !== "YOUR_ACTUAL_BOT_USER_ID"  // ← ADD THIS!
 ```
 
-**Why `event.subtype` matters**: Bot messages often have `subtype: "bot_message"`. This is the MOST RELIABLE way to detect bots!
+**Why `event.bot_id` matters**: Bot messages have this field. This is the MOST RELIABLE way to detect bots!
+
+**Note:** `event.subtype` does NOT exist in Make.com mappings, even though it exists in Slack's raw API.
 
 ## Problem 3: Using event.ts vs event.event_ts 📅
 
@@ -171,7 +173,7 @@ This ensures even if Slack generates multiple event_ids for the same message, yo
    ```
    Event User: {{15.event.user}}
    Bot ID: {{15.event.bot_id}}
-   Subtype: {{15.event.subtype}}
+   Event Type: {{15.event.type}}
    ```
 4. Trigger the loop one more time
 5. Check your email to see the ACTUAL user ID being used
@@ -183,7 +185,6 @@ This ensures even if Slack generates multiple event_ids for the same message, yo
    Conditions (ALL must match):
    - event.type equals "event_callback"
    - event.event.type equals "message"
-   - event.subtype does NOT exist  ← ADD THIS
    - event.bot_id does NOT exist  ← ADD THIS
    - event.user not equal to "B09PJ8DT2HE"
    - event.user not equal to "U09JV1FUPMJ"
@@ -196,7 +197,6 @@ This ensures even if Slack generates multiple event_ids for the same message, yo
    Conditions (ALL must match):
    - event.type equals "event_callback"
    - event.event.type equals "message"
-   - event.subtype does NOT exist  ← ADD THIS
    - event.bot_id does NOT exist  ← ADD THIS
    - event.user not equal to "U09JV1FUPMJ"
    - event.user not equal to "YOUR_BOT_USER_ID"  ← ADD THIS
@@ -335,7 +335,7 @@ Add these temporary debug modules to trace the issue:
      Event ID: {{15.event_id}}
      User: {{15.event.user}}
      Bot ID: {{15.event.bot_id}}
-     Subtype: {{15.event.subtype}}
+     Event Type: {{15.event.type}}
      Text: {{15.event.text}}
    ```
 
@@ -380,7 +380,6 @@ Condition Groups (ALL of the following):
   [
     event.type equals "event_callback",
     event.event.type equals "message",
-    event.subtype does NOT exist,
     event.bot_id does NOT exist,
     authorizations[].is_bot equals "false",
     event.user not equal to "U09JV1FUPMJ",
@@ -389,13 +388,13 @@ Condition Groups (ALL of the following):
 ]
 ```
 
+**Note:** `event.subtype` doesn't exist in Make.com mappings!
+
 ### Module 2/6 (Content Generation) - Add bot check to existing filters
 ```
 Existing conditions
 AND
 event.bot_id does NOT exist
-AND
-event.subtype does NOT exist
 ```
 
 ## Need More Help?
@@ -404,7 +403,7 @@ If the loop continues after these fixes:
 
 1. Export your scenario and check the execution history
 2. Look for the ACTUAL user ID in successful runs
-3. Check if event.subtype is being set
+3. Check if event.bot_id exists for bot messages
 4. Verify the datastore is actually storing records
 5. Check if multiple scenarios are running (duplicate webhooks)
 

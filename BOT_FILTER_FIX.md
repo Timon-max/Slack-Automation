@@ -21,42 +21,37 @@ But you need to check if the **event** (message) is from a bot!
 15.authorizations.is_bot is NOT equal to true
 ```
 
-### With these TWO conditions:
+### With this ONE condition:
 ```
-15.event.subtype does NOT exist
-AND
 15.event.bot_id does NOT exist
 ```
+
+**Note:** Previous versions referenced `15.event.subtype` but this field does NOT exist in Make.com!
 
 ## 📋 Step-by-Step Fix
 
 ### Step 1: Update Module 32 (Check if exists)
 If it has a filter, add:
-- Condition: `15.event.subtype` does NOT exist
 - Condition: `15.event.bot_id` does NOT exist
 
 ### Step 2: Update Module 28 (Store Event)
 Filter should have ALL of these:
 - `32.exist` equals `false`
-- `15.event.subtype` does NOT exist  ← ADD
 - `15.event.bot_id` does NOT exist   ← ADD
 
 ### Step 3: Update Module 13 (Fetch Notion)
 Filter should have ALL of these:
 - `15.event.type` equals `"event_callback"`
 - `15.event.event.type` equals `"message"`
-- `15.event.subtype` does NOT exist  ← ADD
 - `15.event.bot_id` does NOT exist   ← ADD
 - `15.event.user` not equal to `"U09JV1FUPMJ"`
 
 ### Step 4: Update Module 2 (OpenAI - No Research)
 Add to existing filter:
-- `15.event.subtype` does NOT exist  ← ADD
 - `15.event.bot_id` does NOT exist   ← ADD
 
 ### Step 5: Update Module 6 (Perplexity - With Research)
 Add to existing filter:
-- `15.event.subtype` does NOT exist  ← ADD
 - `15.event.bot_id` does NOT exist   ← ADD
 
 ## 🔍 How to Check Event Data
@@ -72,7 +67,6 @@ To see what your bot messages actually contain:
    {
      "event": {
        "type": "message",
-       "subtype": "bot_message",    ← This will exist for bot messages
        "bot_id": "B09XXXXXXXXX",     ← This will exist for bot messages
        "user": "U09NHH78SQK",        ← The bot's user ID
        "text": "...",
@@ -80,6 +74,8 @@ To see what your bot messages actually contain:
      }
    }
    ```
+
+   **Note:** `subtype` does NOT appear in Make.com mappings, even though it exists in Slack's API!
 
 ## 🧪 Testing
 
@@ -119,7 +115,6 @@ After making changes:
 {
   "event": {
     "type": "message",
-    "subtype": "bot_message",    ← HAS subtype
     "bot_id": "B09PJ8DT2HE",     ← HAS bot_id
     "user": "U09NHH78SQK",
     "text": "Here's your post...",
@@ -127,7 +122,7 @@ After making changes:
   }
 }
 ```
-**Result**: Blocked by `subtype` filter ❌ → Bot ignores it
+**Result**: Blocked by `bot_id` filter ❌ → Bot ignores it
 
 ## 🚨 Common Mistakes
 
@@ -143,10 +138,8 @@ This checks the app type, not the message sender!
 ```
 Bots can post with different user IDs. You need to check the event type!
 
-### ✅ CORRECT - Checking event subtype and bot_id:
+### ✅ CORRECT - Checking event bot_id:
 ```
-15.event.subtype does NOT exist
-AND
 15.event.bot_id does NOT exist
 ```
 This reliably detects ALL bot messages!
@@ -155,10 +148,11 @@ This reliably detects ALL bot messages!
 
 Most reliable to least reliable:
 
-1. **`event.subtype` does NOT exist** - 99% reliable
-2. **`event.bot_id` does NOT exist** - 95% reliable
-3. **`event.user` not equal to bot ID** - 80% reliable (user IDs can change)
-4. **`authorizations.is_bot`** - ❌ NOT RELIABLE (checks app, not message)
+1. **`event.bot_id` does NOT exist** - 99% reliable ✅ USE THIS
+2. **`event.user` not equal to bot ID** - 80% reliable (user IDs can change)
+3. **`authorizations.is_bot`** - ❌ NOT RELIABLE (checks app, not message)
+
+**Note:** `event.subtype` is NOT available in Make.com mappings!
 
 ## 🔧 Debug: See What's Actually Being Sent
 
@@ -170,7 +164,6 @@ Add a temporary email notification after Module 15:
 - Body:
   ```
   Event Type: {{15.event.type}}
-  Subtype: {{15.event.subtype}}
   Bot ID: {{15.event.bot_id}}
   User: {{15.event.user}}
   Text: {{15.event.text}}
@@ -191,7 +184,6 @@ Condition Groups (ALL of the following):
   [
     15.event.type equals "event_callback",
     15.event.event.type equals "message",
-    15.event.subtype does NOT exist,
     15.event.bot_id does NOT exist,
     15.event.user not equal to "U09JV1FUPMJ",
     15.event.user is not empty
@@ -199,14 +191,16 @@ Condition Groups (ALL of the following):
 ]
 ```
 
-**Remove ANY filters checking `15.authorizations.is_bot`!**
+**Remove ANY filters checking:**
+- `15.authorizations.is_bot` (checks app, not message)
+- `15.event.subtype` (doesn't exist in Make.com!)
 
 ## ✅ Success Checklist
 
 After implementing:
 
 - [ ] Removed all `authorizations.is_bot` filters
-- [ ] Added `event.subtype does NOT exist` to all filters
+- [ ] Removed any `event.subtype` references (field doesn't exist!)
 - [ ] Added `event.bot_id does NOT exist` to all filters
 - [ ] Cleared the datastore
 - [ ] Tested with one message
@@ -222,13 +216,14 @@ If the bot still loops after this fix:
 2. **Check Make.com execution history**
 3. **Look at Module 15 output** when the loop occurs
 4. **Find the `event` object** in the data
-5. **Check if `subtype` or `bot_id` exists**
+5. **Check if `bot_id` exists** in bot messages
 6. **Verify filters are set to "does NOT exist"** (not "equals false")
 
 The issue is 99% likely that:
 - You're still filtering on `authorizations` instead of `event`
 - OR the filter logic is "OR" instead of "AND"
 - OR you typed "does not equal" instead of "does NOT exist"
+- OR you're still using `event.subtype` (which doesn't exist in Make.com!)
 
 ## 🎓 Understanding the Difference
 
@@ -241,7 +236,7 @@ The issue is 99% likely that:
 ### event object
 - Shows the **actual message data**
 - Shows who sent the message
-- Has `subtype` and `bot_id` for bot messages
+- Has `bot_id` for bot messages (NOTE: `subtype` doesn't appear in Make.com!)
 - ✅ **This is what you need to filter on**
 
 That's why your current filters don't work - you're checking the wrong object!

@@ -27,12 +27,14 @@ Search your scenario for these modules and add the bot ID filter:
 - ✅ Module 2 (OpenAI - No Research) - Add: `event.user ≠ [YOUR_BOT_ID]`
 - ✅ Module 6 (Perplexity Research) - Add: `event.user ≠ [YOUR_BOT_ID]`
 
-### 3. Add `subtype` Check (Most Important!)
+### 3. Add `bot_id` Check (Most Important!)
 
 In EVERY filter above, also add:
-- ✅ `event.subtype` does NOT exist
+- ✅ `event.bot_id` does NOT exist
 
-**Why?** Bot messages have `subtype: "bot_message"`. This catches ALL bots!
+**Why?** Bot messages have `bot_id` field. This catches ALL bots!
+
+**Note:** Previous versions referenced `event.subtype` but this field does NOT exist in Make.com mappings!
 
 ## 🔧 CRITICAL FIXES (10 minutes)
 
@@ -88,7 +90,7 @@ The bot user ID is wrong! Do this:
 1. Turn OFF scenario
 2. Add "Tools → Set Variable" right after Module 15
 3. Variable name: `debug_user`
-4. Value: `{{15.event.user}} | {{15.event.bot_id}} | {{15.event.subtype}}`
+4. Value: `{{15.event.user}} | {{15.event.bot_id}} | {{15.event.type}}`
 5. Add "Tools → Send Email" after that
 6. Email yourself the variable value
 7. Turn ON scenario
@@ -103,12 +105,13 @@ Add this to EVERY content-processing module:
 
 ```
 Conditions (ALL must match):
-- event.subtype does NOT exist
 - event.bot_id does NOT exist
 - event.user not equal to "B09PJ8DT2HE"
 - event.user not equal to "U09JV1FUPMJ"
 - event.user not equal to "[YOUR_ACTUAL_BOT_USER_ID]"
 ```
+
+**Note:** Don't use `event.subtype` - this field doesn't exist in Make.com!
 
 Replace `[YOUR_ACTUAL_BOT_USER_ID]` with the ID from Step 1!
 
