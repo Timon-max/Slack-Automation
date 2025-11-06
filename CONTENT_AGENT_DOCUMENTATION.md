@@ -364,6 +364,714 @@ Create 3 Instagram posts about morning routines
 
 ---
 
+## ⚙️ DETAILED MODULE CONFIGURATIONS
+
+This section provides **exact settings and mappings** for each module in Make.com. Use this as a reference when setting up or troubleshooting your scenario.
+
+---
+
+### **MODULE 15: Webhook Trigger (Slack Events)**
+
+**Module Type:** `gateway:CustomWebHook`
+**Purpose:** Receives Slack events via webhook
+
+**Configuration:**
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| **Webhook** | Create new webhook | This will generate your unique webhook URL |
+| **Maximum results** | 5 | Number of webhook events to process per execution |
+
+**Output Data:**
+- `{{15.type}}` - Event type ("url_verification" or "event_callback")
+- `{{15.challenge}}` - Verification challenge from Slack
+- `{{15.event.text}}` - The message text from Slack
+- `{{15.event.channel}}` - Slack channel ID
+- `{{15.event.ts}}` - Message timestamp
+- `{{15.event_id}}` - Unique event identifier
+- `{{15.event.user}}` - User ID who sent the message
+- `{{15.event.type}}` - Event subtype (e.g., "message")
+
+---
+
+### **MODULE 18: Router (Verification or Process)**
+
+**Module Type:** `builtin:BasicRouter`
+**Purpose:** Routes to verification handler or main processing
+
+**Routes:**
+1. **Route 1:** If `{{15.type}}` equals "url_verification" → Go to Module 17
+2. **Route 2:** All other events → Go to Module 19
+
+**No configuration needed** - routes automatically based on conditions
+
+---
+
+### **MODULE 17: Webhook Response (Verification)**
+
+**Module Type:** `gateway:WebhookRespond`
+**Purpose:** Responds to Slack verification challenge
+
+**Filter Condition:**
+- **Name:** "Handle Verification"
+- **Condition:** `{{15.type}}` equals "url_verification"
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Status** | 200 | HTTP status code |
+| **Body** | `{{15.challenge}}` | Return the challenge token |
+| **Headers** | Key: `Content-Type`<br>Value: `text/plain` | Set content type |
+
+---
+
+### **MODULE 19: Webhook Response (Acknowledge)**
+
+**Module Type:** `gateway:WebhookRespond`
+**Purpose:** Immediately acknowledge Slack event
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Status** | 200 | HTTP status code |
+| **Body** | (empty) | No body needed |
+| **Headers** | (empty) | No custom headers |
+
+---
+
+### **MODULE 32: Check if Event Processed**
+
+**Module Type:** `datastore:ExistRecord`
+**Purpose:** Check if this event ID already exists in datastore
+
+**Filter Condition:**
+- **Name:** "Not Already Processed"
+- **Conditions (ALL must be true):**
+  1. `{{15.type}}` equals "event_callback"
+  2. `{{15.event.type}}` equals "message"
+  3. `{{15.authorizations[].is_bot}}` does not exist OR equals "false"
+  4. `{{15.event.user}}` not equals `B09PJ8DT2HE` (bot user ID - update to yours)
+  5. `{{15.event.user}}` not equals "" (not empty)
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Data store** | Select "Slack Event Loop Prevention" | Your datastore (ID: 127058) |
+| **Key** | `{{15.event_id}}` | Event ID to check |
+
+**Output:**
+- `{{32.exist}}` - "true" if event was already processed, "false" if new
+
+---
+
+### **MODULE 33: Router (ID Exists or Not)**
+
+**Module Type:** `builtin:BasicRouter`
+**Purpose:** Route based on whether event was already processed
+
+**Routes:**
+1. **Route 1:** If `{{32.exist}}` equals "true" → Go to Module 34 (STOP - already processed)
+2. **Route 2:** If `{{32.exist}}` equals "false" → Go to Module 28 (Continue processing)
+
+---
+
+### **MODULE 28: Store Event Record**
+
+**Module Type:** `datastore:AddRecord`
+**Purpose:** Store event ID to prevent duplicate processing
+
+**Filter Condition:**
+- **Name:** "ID doesn't exist"
+- **Condition:** `{{32.exist}}` equals "false"
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Data store** | Select "Slack Event Loop Prevention" | Your datastore (ID: 127058) |
+| **Key** | `{{15.event_id}}` | Unique key |
+| **Data** | ```{"event_id": "{{15.event_id}}", "timestamp": "{{15.event.ts}}"}``` | JSON data to store |
+| **Overwrite** | false | Never overwrite existing records |
+
+---
+
+### **MODULE 13: Notion Search (Database 1)**
+
+**Module Type:** `notion:searchObjects1`
+**Purpose:** Retrieve latest context from first Notion database
+
+**Filter Condition:**
+- **Name:** "Normal Events"
+- **Conditions (ALL must be true):**
+  1. `{{15.event.type}}` equals "message"
+  2. `{{15.type}}` equals "event_callback"
+  3. `{{15.event.subtype}}` does not exist
+  4. `{{15.authorizations[].is_bot}}` does not exist OR equals "false"
+  5. `{{15.event.user}}` not equals bot user ID
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Connection** | Your Notion connection | Notion API integration |
+| **Select** | Database Items (Legacy) | Type of search |
+| **Database** | `9f4737db95b24102bbae5f80637ac8db` | **REPLACE with your database ID** |
+| **Limit** | 1 | Return only 1 result |
+| **Sorts** | Sort by: Timestamp<br>Timestamp type: Created time<br>Direction: Descending | Get newest item first |
+
+**How to get your Database ID:**
+1. Open database in Notion as full page
+2. Look at URL: `notion.so/workspace/{DATABASE_ID}?v=...`
+3. Copy the long string of characters (the DATABASE_ID part)
+4. Paste it into the Database field
+
+---
+
+### **MODULE 14: Notion Search (Database 2)**
+
+**Module Type:** `notion:searchObjects1`
+**Purpose:** Retrieve context from second Notion database (optional)
+
+**Configuration:** Same as Module 13, except:
+
+| Field | Value |
+|-------|-------|
+| **Database** | `bc632601-d5f6-455d-af66-ad040536bc3e` | **REPLACE with your second database ID** |
+
+---
+
+### **MODULE 4: Router (Research Needed?)**
+
+**Module Type:** `builtin:BasicRouter`
+**Purpose:** Decide whether to research or generate directly
+
+**Routes:**
+
+**Route 1: No Research Needed** → Go to Module 2 (Direct OpenAI)
+- **Condition:** `{{15.event.text}}` does NOT contain any of these keywords (case insensitive):
+  - "research"
+  - "latest"
+  - "news"
+  - "trends"
+  - "current"
+
+**Route 2: Research Needed** → Go to Module 6 (Perplexity)
+- **Condition:** `{{15.event.text}}` CONTAINS any of these keywords (case insensitive):
+  - "research" OR
+  - "latest" OR
+  - "news" OR
+  - "trends" OR
+  - "current"
+
+---
+
+### **MODULE 2: OpenAI Content Generation (No Research)**
+
+**Module Type:** `openai-gpt-3:CreateCompletion`
+**Purpose:** Generate content directly without research
+
+**Filter Condition:**
+- **Name:** "No research needed"
+- **Condition:** Message does NOT contain research keywords (see Module 4)
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Connection** | Your OpenAI connection | OpenAI API key |
+| **Select** | Create a Chat Completion (GPT and o1 models) | API method |
+| **Model** | `o4-mini` | **UPDATE to:** `gpt-4o` or `gpt-4-turbo` |
+| **Temperature** | 0.7 | Creativity level (0-2) |
+| **Top P** | 1 | Nucleus sampling |
+| **N Completions** | 1 | Number of responses |
+| **Max Tokens** | 8000 | Maximum response length |
+| **Response Format** | text | Output format |
+
+**Messages Array:**
+
+**Message 1 (System):**
+- **Role:** Developer / System
+- **Content:** [SEE DETAILED SYSTEM PROMPT BELOW]
+
+**Message 2 (User):**
+- **Role:** User
+- **Content:** `{{15.event.text}}`
+- **Image Detail:** Auto
+
+**Output:**
+- `{{2.choices[].message.content}}` - The generated content
+
+---
+
+#### 📝 System Prompt for Module 2 (and Module 7)
+
+```
+You are Cesar's Content Repurposing Assistant specializing in health, fitness, and holistic wellness content.
+
+YOUR ROLE:
+Transform source material (articles, call notes, ideas, research) into platform-specific content based on the user's request.
+
+HOW TO INTERPRET REQUESTS:
+1. Extract from the user's message:
+   - Platform (Instagram, LinkedIn, YouTube, Email)
+   - Content type (posts, carousel, script, newsletter)
+   - QUANTITY RULES:
+     - If user specifies a number (e.g., "1 post", "3 posts", "five posts"), create EXACTLY that many
+     - Default to 5 only if no quantity is specified
+     - Count words: one=1, two=2, three=3, etc.
+   - Any specific angle or focus requested
+
+2. If not specified, use these defaults:
+   - Platform: Instagram
+   - Type: Single posts
+   - Quantity: 3 variations
+   - Angle: Multiple perspectives on the source material
+
+CESAR'S VOICE & STYLE:
+- Conversational but knowledgeable - trusted coach explaining to a friend
+- First person (I/we), never corporate third person
+- Lead with bold statement or question (strong hook)
+- Short sentences and paragraphs (max 2-3 lines each)
+- Line breaks between thoughts for readability
+- Clear call-to-action at the end
+- ONE main point per piece of content
+- Practical, implementable wellness advice
+
+FORBIDDEN:
+- Fitness clichés: "no pain no gain", "beast mode", "crush it", "grind"
+- Generic motivational quotes without actionable advice
+- Medical advice or diagnosis (stay in coaching lane)
+- Hype or exaggeration
+- Using Hyphens
+- Using the format "This is not X - It's Y"
+
+PLATFORM-SPECIFIC RULES:
+
+Instagram Posts:
+- CRITICAL: First 125 characters are preview text - hook must be here
+- Total length: Either 138-150 characters (short, punchy) OR 1,500-2,200 characters (long-form storytelling)
+- Avoid the 300-800 word middle zone (poor engagement)
+- Use 3-5 strategic hashtags (not 1-3)
+- 2-3 emojis placed strategically (not excessive, but they DO increase engagement)
+- End with engagement question to drive comments
+- Line breaks every 2-3 sentences for mobile readability
+- Personal stories and vulnerable moments outperform tips
+
+Instagram Carousel Ideas:
+- If source material has multiple points, suggest carousel format (10x better engagement than single posts)
+- Slide 1: Hook/Problem
+- Slides 2-8: Solutions/Steps/Insights (one per slide)
+- Slide 9-10: Summary/CTA
+- Keep text per slide to 15-30 words max
+
+LinkedIn:
+- CRITICAL: First 2-3 lines (210 characters) show before "see more" - hook must be HERE
+- Optimal length: 1,300-2,000 characters (sweet spot for engagement)
+- Use generous line breaks and white space (mobile-first)
+- Lead with personal story or bold statement
+- Structure: Hook → Story/Context → Insight/Lesson → CTA
+- Use 3-5 highly targeted hashtags (not 0-2)
+- Lists and numbered frameworks perform exceptionally well
+- End with simple question or comment prompt
+- Professional but personal - share vulnerable moments and lessons learned
+- NO sales language in main content
+
+YouTube Scripts:
+- CRITICAL: Hook in first 5-8 seconds (not 10) - viewer decides to stay or leave
+- Pattern interrupt every 60-90 seconds to maintain retention
+- Script for speaking, not reading (contractions, casual language)
+- Include verbal chapter markers ("Now let's talk about...")
+- Structure:
+  [0:00-0:08] Hook - "Here's why [intriguing statement]"
+  [0:08-0:30] Context/Story - why this matters
+  [0:30-X:XX] Main content with clear sections
+  [X:XX-End] Recap key points + Strong CTA
+- Write "retention hooks" like "And here's where it gets interesting..."
+- Include natural pause points for B-roll or graphics
+- End screen CTA: what to watch next or subscribe prompt
+
+Email Newsletters:
+- Subject line: 40-50 characters, curiosity-driven or benefit-focused
+- Preview text (first line): Reinforce subject line or create intrigue
+- Opening: Personal greeting, reference recent event or conversation
+- Body structure:
+  - One clear idea/story per email (don't cram multiple topics)
+  - Short paragraphs (2-3 sentences max)
+  - Subheads for skimmability
+  - Bullets for lists
+  - Personal stories over generic advice
+- Length: Either 200-300 words (quick tips) OR 1,000-1,500 words (deep dive story)
+  - Avoid 400-700 word middle zone
+- ONE clear CTA (not multiple competing actions)
+- P.S. section at end (high engagement, use for secondary CTA or personal note)
+- Conversational sign-off
+- Mobile-first formatting (shorter paragraphs than desktop)
+
+OUTPUT FORMAT:
+ALWAYS start with the post number label, even for single posts.
+
+For ONE post:
+---
+POST 1:
+[content]
+---
+
+For MULTIPLE posts:
+---
+POST 1:
+[content]
+---
+POST 2:
+[content]
+---
+POST 3:
+[content]
+---
+
+CRITICAL: Every post must start with "POST X:" on its own line.
+
+For Instagram carousel:
+---
+CAROUSEL: [Title]
+
+SLIDE 1:
+[Hook text - 15-30 words]
+
+SLIDE 2:
+[Point 1 - 15-30 words]
+
+[continue for all slides]
+---
+
+For LinkedIn:
+---
+POST 1:
+
+[Content with generous line breaks]
+
+Hashtags: #hashtag1 #hashtag2 #hashtag3
+---
+
+For YouTube:
+---
+YOUTUBE SCRIPT: [Suggested Title]
+
+[0:00-0:08] HOOK
+[Content]
+
+[0:08-0:30] INTRO
+[Content]
+
+[0:30-X:XX] MAIN CONTENT
+[Section with clear transitions]
+
+[X:XX-END] RECAP & CTA
+[Content]
+
+---
+VIDEO DESCRIPTION:
+[SEO-optimized description with timestamps]
+---
+
+For Email:
+---
+EMAIL NEWSLETTER
+
+Subject Line: [40-50 chars]
+Preview Text: [First compelling line]
+
+---
+
+Hey [First Name or general greeting],
+
+[Opening paragraph - personal, conversational]
+
+[Main content with subheads, bullets, line breaks]
+
+[Clear CTA]
+
+[Conversational sign-off]
+[Cesar's name/signature]
+
+P.S. [Secondary thought or personal note]
+---
+
+CONTENT STRATEGY:
+- Each variation should take a different angle: educational, story-based, myth-busting, contrarian, practical how-to
+- Make each piece standalone - don't assume audience saw previous content
+- Extract most valuable, actionable insights from source material
+- Use specific examples and stories when available
+- For wellness content: Focus on "why it works" not just "do this"
+
+If the user's request is unclear, make reasonable assumptions and state them at the start of your response.
+```
+
+**💡 Customization Tip:** Replace "Cesar" with your client's name, update the industry/niche, modify the voice guidelines, and adjust platform rules to match your brand.
+
+---
+
+### **MODULE 29: Slack Reply (No Research Path)**
+
+**Module Type:** `slack:CreateMessage`
+**Purpose:** Post AI-generated content back to Slack
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Connection** | Your Slack connection | Slack bot OAuth token |
+| **Enter channel ID or name** | Enter manually | How to specify channel |
+| **Channel** | `{{15.event.channel}}` | Reply to same channel |
+| **Text** | `{{2.choices[].message.content}}` | AI-generated content from Module 2 |
+| **Thread timestamp** | `{{15.event.ts}}` | Reply in same thread |
+| **Parse** | false | Don't parse URLs/mentions |
+| **Enable markdown** | true | Use Slack markdown formatting |
+
+---
+
+### **MODULE 6: Perplexity Research**
+
+**Module Type:** `perplexity-ai:createAChatCompletion`
+**Purpose:** Research topic using web search before generating content
+
+**Filter Condition:**
+- **Name:** "Research needed"
+- **Condition:** `{{15.event.text}}` CONTAINS one of:
+  - "research" OR
+  - "current" OR
+  - "trends" OR
+  - "latest" OR
+  - "news"
+
+**Configuration:**
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Connection** | Your Perplexity connection | Perplexity API key |
+| **Model** | `sonar` | Perplexity model with web search |
+| **Temperature** | 0.3 | Lower = more factual |
+| **Max Tokens** | 2000 | Maximum response length |
+| **Web Search Options** | Search context size: `medium` | How much web context to include |
+
+**Messages Array:**
+
+**Message 1 (System):**
+- **Role:** Developer / System
+- **Content:** `You are a research assistant. Provide comprehensive, accurate information with citations from reliable sources. Focus on current, factual data relevant to health, fitness, and wellness topics.`
+
+**Message 2 (User):**
+- **Role:** User
+- **Content:** `{{15.event.text}}`
+
+**Output:**
+- `{{6.choices[].message.content}}` - Research results with citations
+
+---
+
+### **MODULE 7: OpenAI Content Generation (With Research)**
+
+**Module Type:** `openai-gpt-3:CreateCompletion`
+**Purpose:** Generate content using research results from Module 6
+
+**Configuration:**
+- **Exactly the same as Module 2**
+- Uses the same system prompt
+- User message: `{{15.event.text}}` (the system prompt instructs it to incorporate research when available)
+
+**Output:**
+- `{{7.choices[].message.content}}` - Generated content incorporating research
+
+---
+
+### **MODULE 30: Slack Reply (Research Path)**
+
+**Module Type:** `slack:CreateMessage`
+**Purpose:** Post AI-generated content (with research) back to Slack
+
+**Configuration:**
+- **Exactly the same as Module 29**, except:
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| **Text** | `{{7.choices[].message.content}}` | AI-generated content from Module 7 (instead of Module 2) |
+
+---
+
+## 🔧 Configuration Checklist
+
+Use this checklist when setting up or verifying your scenario:
+
+### ✅ Webhook & Slack
+- [ ] Webhook created and URL copied
+- [ ] Webhook URL added to Slack Event Subscriptions
+- [ ] Slack verification successful (green checkmark)
+- [ ] Bot events subscribed: `message.channels`, `message.groups`, `message.im`, `message.mpim`
+- [ ] Slack bot token saved and connected in Make.com
+- [ ] Bot invited to test channel
+
+### ✅ Datastore
+- [ ] Datastore "Slack Event Loop Prevention" created (or exists)
+- [ ] Module 32, 34, 28 all reference same datastore
+- [ ] Key structure: `event_id` as string
+
+### ✅ Notion (Optional)
+- [ ] Notion integration created
+- [ ] Integration token saved and connected in Make.com
+- [ ] Database IDs updated in Module 13 and 14
+- [ ] Databases shared with integration
+- [ ] Sort settings configured (Created time, Descending)
+
+### ✅ OpenAI
+- [ ] API key saved and connected
+- [ ] Model name updated from `o4-mini` to `gpt-4o` or `gpt-4-turbo`
+- [ ] System prompt customized to your brand
+- [ ] Temperature set to 0.7
+- [ ] Max tokens set to 8000
+- [ ] Both Module 2 and Module 7 configured identically
+
+### ✅ Perplexity
+- [ ] API key saved and connected
+- [ ] Model set to `sonar`
+- [ ] Temperature set to 0.3
+- [ ] Web search enabled with medium context
+- [ ] Max tokens set to 2000
+
+### ✅ Router Filters
+- [ ] Module 4 filters updated with your research keywords
+- [ ] Module 32 filters updated with your bot user ID
+- [ ] Module 13 filters updated with your bot user ID
+- [ ] All filter conditions use correct operators (equals, contains, etc.)
+
+### ✅ Slack Replies
+- [ ] Module 29 maps to `{{2.choices[].message.content}}`
+- [ ] Module 30 maps to `{{7.choices[].message.content}}`
+- [ ] Both modules map channel and thread_ts correctly
+- [ ] Markdown enabled in both
+
+### ✅ Testing
+- [ ] Scenario activated (toggle ON)
+- [ ] Test message sent in Slack
+- [ ] Response received within 30 seconds
+- [ ] Content quality acceptable
+- [ ] No errors in execution history
+
+---
+
+## 📊 Module Flow Quick Reference
+
+```
+[15] Webhook Trigger
+  ↓
+[18] Router: Verification?
+  ├─YES→ [17] Respond with challenge → END
+  └─NO─→ [19] Acknowledge event
+           ↓
+         [32] Check if processed
+           ↓
+         [33] Router: Already processed?
+           ├─YES→ [34] Log (already done) → END
+           └─NO─→ [28] Store event ID
+                   ↓
+                 [13] Notion Search 1 (optional)
+                   ↓
+                 [14] Notion Search 2 (optional)
+                   ↓
+                 [4] Router: Research needed?
+                   ├─NO─→ [2] OpenAI Generate
+                   │       ↓
+                   │     [29] Slack Reply → END
+                   │
+                   └─YES→ [6] Perplexity Research
+                           ↓
+                         [7] OpenAI Generate
+                           ↓
+                         [30] Slack Reply → END
+```
+
+---
+
+## 🎨 Customization Examples
+
+### Example 1: Change Research Keywords
+
+**In Module 4 (Router):**
+
+Current keywords: "research", "latest", "news", "trends", "current"
+
+To add "study", "data", "statistics":
+
+1. Click Module 4
+2. Find the filter conditions
+3. Add new conditions:
+   - `{{15.event.text}}` contains "study" (case insensitive)
+   - `{{15.event.text}}` contains "data" (case insensitive)
+   - `{{15.event.text}}` contains "statistics" (case insensitive)
+
+---
+
+### Example 2: Change Default Platform from Instagram to LinkedIn
+
+**In Module 2 and Module 7 (OpenAI):**
+
+Find this line in the system prompt:
+```
+- Platform: Instagram
+- Type: Single posts
+- Quantity: 3 variations
+```
+
+Change to:
+```
+- Platform: LinkedIn
+- Type: Single posts
+- Quantity: 1 post
+```
+
+---
+
+### Example 3: Add Your Bot User ID to Filters
+
+**Find your bot user ID:**
+1. In Slack, go to your bot's profile
+2. Click the three dots → View full profile
+3. Click "More" → Copy member ID
+4. It looks like: `U01ABC123DEF`
+
+**Update in Module 32, Module 13:**
+
+Change:
+```
+{{15.event.user}} not equals B09PJ8DT2HE
+```
+
+To:
+```
+{{15.event.user}} not equals YOUR_BOT_USER_ID
+```
+
+---
+
+### Example 4: Change Brand Voice in System Prompt
+
+Find this section in Modules 2 and 7:
+```
+CESAR'S VOICE & STYLE:
+- Conversational but knowledgeable - trusted coach explaining to a friend
+- First person (I/we), never corporate third person
+```
+
+Replace with your brand:
+```
+[YOUR BRAND]'S VOICE & STYLE:
+- [Your tone description]
+- [Your preferred perspective]
+```
+
+---
+
 ## 💬 How to Use the Content Agent
 
 Once set up, using the agent is incredibly simple!
